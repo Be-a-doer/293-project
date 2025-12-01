@@ -1,6 +1,37 @@
-.Rproj.user
+# ---- R / RStudio ----
+.Rproj.user/
 .Rhistory
+.Rapp.history
 .RData
+.RDataTmp
+.Ruserdata
+.Rprofile
+
+# OAuth2 token (for httr)
 .httr-oauth
+
+# ---- R Markdown / Quarto ----
+*_cache/
+cache/
+.quarto/
+*.utf8.md
+*.knit.md
+
+# ---- Build artifacts ----
+*.tar.gz
+*.Rcheck/
+docs/
+rsconnect/
+vignettes/*.html
+vignettes/*.pdf
+
+# ---- System files ----
 .DS_Store
-.quarto
+Thumbs.db
+
+# ---- Package development ----
+*-Ex.R
+po/*~
+
+# ---- Others ----
+.Renviron
