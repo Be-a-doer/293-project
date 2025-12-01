@@ -1,0 +1,109 @@
+---
+title: "293-project"
+author: "Yifan Wu"
+date: "2025-11-30"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## construct data and source detection
+```{r}
+set.seed(1)
+
+D.training <- models("gaussian", K = 4, p = 500, Ka = 2) # generate training data, ka means transferable source
+
+# plot for class "glmtrans"
+fit.gaussian <- glmtrans(D.training$target, D.training$source)
+plot(fit.gaussian)
+
+
+# plot for class "glmtrans_source_detection"
+detection.gaussian <- source_detection(D.training$target, D.training$source)
+plot(detection.gaussian)
+```
+
+
+## based on 3 models to compare glmtrans and lasso
+
+```{r}
+set.seed(0)
+
+# fit a linear regression model
+
+D.training <- models("gaussian", type = "all", n.target = 100, K = 2, p = 500) # 1 target + K source
+D.test <- models("gaussian", type = "target", n.target = 500, p = 500) # test data only has target
+fit.gaussian <- glmtrans(D.training$target, D.training$source) # use glmtrans to fit
+y.pred.glmtrans <- predict(fit.gaussian, D.test$target$x) # predict based on test
+
+```
+
+```{r}
+# compare the test MSE with classical Lasso fitted on target data
+library(glmnet)
+fit.lasso <- cv.glmnet(x = D.training$target$x, y = D.training$target$y) # only input target in lasso model
+y.pred.lasso <- predict(fit.lasso, D.test$target$x)
+
+mean((y.pred.glmtrans - D.test$target$y)^2)
+mean((y.pred.lasso - D.test$target$y)^2)
+
+```
+we can see, transfer learning has a better perform than traditional lasso.
+
+```{r}
+# fit a logistic regression model
+D.training <- models("binomial", type = "all", n.target = 100, K = 2, p = 500)
+D.test <- models("binomial", type = "target", n.target = 500, p = 500)
+fit.binomial <- glmtrans(D.training$target, D.training$source, family = "binomial")
+y.pred.glmtrans <- predict(fit.binomial, D.test$target$x, type = "class")
+
+# compare the test error with classical Lasso fitted on target data
+library(glmnet)
+fit.lasso <- cv.glmnet(x = D.training$target$x, y = D.training$target$y, family = "binomial")
+y.pred.lasso <- as.numeric(predict(fit.lasso, D.test$target$x, type = "class"))
+
+mean(y.pred.glmtrans != D.test$target$y)
+mean(y.pred.lasso != D.test$target$y)
+
+```
+
+```{r}
+# fit a Poisson regression model
+D.training <- models("poisson", type = "all", n.target = 100, K = 2, p = 500)
+D.test <- models("poisson", type = "target", n.target = 500, p = 500)
+fit.poisson <- glmtrans(D.training$target, D.training$source, family = "poisson")
+y.pred.glmtrans <- predict(fit.poisson, D.test$target$x, type = "response")
+
+# compare the test MSE with classical Lasso fitted on target data
+fit.lasso <- cv.glmnet(x = D.training$target$x, y = D.training$target$y, family = "poisson")
+y.pred.lasso <- as.numeric(predict(fit.lasso, D.test$target$x, type = "response"))
+
+mean((y.pred.glmtrans - D.test$target$y)^2)
+mean((y.pred.lasso - D.test$target$y)^2)
+```
+
+
+## construct confident interval
+
+```{r}
+set.seed(0, kind = "L'Ecuyer-CMRG")
+
+# generate binomial data
+D.training <- models("binomial", type = "all", K = 2, p = 200)
+
+# fit a logistic regression model via two-step transfer learning method
+fit.binomial <- glmtrans(D.training$target, D.training$source, family = "binomial")
+
+# calculate the CI based on the point estimate from two-step transfer learning method
+fit.inf <- glmtrans_inf(target = D.training$target, source = D.training$source,
+family = "binomial", beta.hat = fit.binomial$beta, cores = 2)
+head(fit.inf$CI)
+```
+```{r}
+library(usethis)
+library(gitcreds)
+```
+
+
