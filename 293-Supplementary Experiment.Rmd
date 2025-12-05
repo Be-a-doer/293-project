@@ -1,0 +1,116 @@
+---
+title: "293-Supplementary Experiment"
+author: "Yifan Wu"
+date: "2025-12-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# check correct rate for source detection
+
+
+```{r}
+library(MASS)
+library(glmnet)
+library(glmtrans)
+
+set.seed(248)
+```
+## construct target and source data
+```{r}
+
+predict_glmcoef <- function(X, beta) {
+  X <- as.matrix(X); beta <- as.numeric(beta)
+  if (length(beta) == ncol(X) + 1) X <- cbind(1, X)
+  else if (length(beta) != ncol(X))
+    stop(sprintf("dimension fail: ncol(X)=%d, length(beta)=%d", ncol(X), length(beta)))
+  as.numeric(1/(1 + exp(-(X %*% beta))))
+}
+
+simulate_one <- function(p=500, nT=1000, nS=800, K=4, s=10, rho=0.3){
+  # Sigma & generator
+  Sigma <- rho^abs(outer(1:p, 1:p, "-"))
+  rnorm_mat <- function(n) MASS::mvrnorm(n, mu=rep(0,p), Sigma=Sigma)
+
+  # target beta 
+  supp  <- sample(1:p, s)
+  betaT <- rep(0, p); betaT[supp] <- sample(c(-1,1), s, TRUE)
+
+  #  source betas(S1,S2 are transferable, S3,S4 are bad)
+  beta1 <- betaT; beta1[supp] <- beta1[supp] + rnorm(s, 0, 0.2)  # small bias
+  beta2 <- betaT                                                # identical
+  beta3 <- betaT; beta3[supp] <- beta3[supp] + rnorm(s, 0, 1.0)  # big biased
+  beta4 <- rep(0, p); beta4[supp] <- -betaT[supp]                 # harmful
+  betas <- list(beta1,beta2,beta3,beta4)
+
+  # generator logistic data
+  gen_binom <- function(n, beta){
+    X <- rnorm_mat(n)
+    eta <- X %*% beta
+    p  <- 1/(1+exp(-eta))
+    y  <- rbinom(n, 1, p)
+    list(X=as.matrix(X), y=as.numeric(y))
+  }
+
+  # target train/test
+  Dtarget_tr <- gen_binom(nT, betaT)
+  Dtarget_te <- gen_binom(5000, betaT)
+
+  # sources
+  sources <- lapply(betas, \(b) gen_binom(nS, b))
+
+  # Target-only Lasso 
+  fit_lasso  <- glmnet::cv.glmnet(Dtarget_tr$X, Dtarget_tr$y, family="binomial", alpha=1)
+  bhat_lasso <- as.numeric(coef(fit_lasso, s="lambda.min"))[-1]  # 去掉截距
+  prob_lasso <- as.numeric(predict(fit_lasso, newx=Dtarget_te$X, s="lambda.min", type="response"))
+  err_lasso  <- mean((prob_lasso > 0.5) != Dtarget_te$y)
+
+  # TransGLM
+  target_list <- list(x=as.matrix(Dtarget_tr$X), y=as.numeric(Dtarget_tr$y))
+  source_list <- lapply(sources, \(S) list(x=as.matrix(S$X), y=as.numeric(S$y)))
+  fit_trans   <- glmtrans::glmtrans(target=target_list, source=source_list, family="binomial")
+  bhat_trans  <- as.numeric(fit_trans$beta)
+  prob_tr     <- predict_glmcoef(Dtarget_te$X, bhat_trans)
+  err_tr      <- mean((prob_tr > 0.5) != Dtarget_te$y)
+
+  # source weights
+  nm <- intersect(c("weight","weights","w","alpha","source_weight","source_weights"),
+                  names(fit_trans))
+  K  <- length(source_list)
+  w  <- if (length(nm)) suppressWarnings(as.numeric(fit_trans[[nm[1]]])) else rep(NA_real_, K)
+  if (length(w) != K) w <- rep(NA_real_, K)
+  sel <- ifelse(is.na(w), NA, abs(w) > 1e-6)
+
+  
+  list(
+    fit_lasso = fit_lasso,
+    fit_trans = fit_trans,
+    betaT     = betaT,
+    supp      = supp,
+    bhat_lasso = bhat_lasso,
+    bhat_trans = bhat_trans,
+    err_lasso  = err_lasso,
+    err_tr     = err_tr,
+    weights    = w,
+    selected   = sel,
+    Dtarget_tr = Dtarget_tr,   
+    Dtarget_te = Dtarget_te,
+    sources    = sources
+  )
+}
+
+```
+
+```{r}
+set.seed(1)
+one <- simulate_one()  
+str(one)
+one
+
+
+```
+
+

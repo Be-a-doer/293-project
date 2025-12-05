@@ -11,6 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## construct data and source detection
 ```{r}
+library(glmtrans)
 set.seed(1)
 
 D.training <- models("gaussian", K = 4, p = 500, Ka = 2) # generate training data, ka means transferable source
@@ -101,9 +102,6 @@ fit.inf <- glmtrans_inf(target = D.training$target, source = D.training$source,
 family = "binomial", beta.hat = fit.binomial$beta, cores = 2)
 head(fit.inf$CI)
 ```
-```{r}
-library(usethis)
-library(gitcreds)
-```
+
 
 
